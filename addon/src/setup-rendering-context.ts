@@ -19,6 +19,9 @@ import isComponent from './-internal/is-component.ts';
 import { precompileTemplate } from '@ember/template-compilation';
 import { setComponentTemplate } from '@glimmer/manager';
 import { setComponentManager, capabilities } from '@ember/component';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import { renderComponent } from '@ember/-internals/glimmer';
 
 const OUTLET_TEMPLATE = precompileTemplate(`{{outlet}}`, { strictMode: false });
 const EMPTY_TEMPLATE = precompileTemplate(``, { strictMode: false });
@@ -50,6 +53,10 @@ export function isRenderingTestContext(
 
 function supportsRenderRootComponent(owner: Owner): boolean {
   return typeof (owner as any).renderRootComponent === 'function';
+}
+
+function supportsRenderComponent(): boolean {
+  return typeof renderComponent === 'function';
 }
 
 /**
@@ -128,6 +135,7 @@ function renderViaRenderComponent(
   owner: Owner,
   context: object,
   templateFactoryOrComponent: object,
+  options?: RenderOptions,
 ): void {
   let component;
   if (isComponent(templateFactoryOrComponent)) {
@@ -136,7 +144,22 @@ function renderViaRenderComponent(
     component = contextComponentFor(templateFactoryOrComponent, context);
   }
 
-  (owner as any).renderRootComponent(component);
+  const ownerToRenderFrom = options?.owner || owner;
+
+  if (
+    ownerToRenderFrom === owner &&
+    typeof (owner as any).renderRootComponent === 'function'
+  ) {
+    (owner as any).renderRootComponent(component);
+  } else {
+    // @TODO: Evaluate if `renderRootComponent` should allow an alternative owner
+    // as per `RenderOptions.owner` comment
+    renderComponent(component, {
+      into: getRootElement() as Element,
+      owner: ownerToRenderFrom,
+      appendIntoTarget: true,
+    });
+  }
 }
 
 /**
@@ -237,9 +260,14 @@ export function render(
       const testMetadata = getTestMetadata(context);
       testMetadata.usedHelpers.push('render');
 
-      if (supportsRenderRootComponent(owner)) {
-        // modern `renderRootComponent` path using `renderComponent`
-        renderViaRenderComponent(owner, context, templateFactoryOrComponent);
+      if (supportsRenderComponent()) {
+        // modern `renderComponent` path
+        renderViaRenderComponent(
+          owner,
+          context,
+          templateFactoryOrComponent,
+          options,
+        );
       } else {
         // Legacy `view:-outlet` lookup path
         renderLegacyOutlet(owner, context, templateFactoryOrComponent, options);
@@ -328,8 +356,10 @@ export default function setupRenderingContext(
         (dispatcher as any).setup({}, '#ember-testing');
       }
 
-      if (supportsRenderRootComponent(owner)) {
-        (owner as any).rootElement = getRootElement();
+      if (supportsRenderComponent()) {
+        if (supportsRenderRootComponent(owner)) {
+          (owner as any).rootElement = getRootElement();
+        }
         return render(EMPTY_TEMPLATE);
       }
 
