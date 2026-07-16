@@ -11,6 +11,8 @@ import {
   render,
   rerender,
   click,
+  setupOnerror,
+  resetOnerror,
 } from '@ember/test-helpers';
 import templateOnly from '@ember/component/template-only';
 
@@ -204,5 +206,35 @@ module('setupRenderingContext "real world"', function (hooks) {
         assert.equal(this.element.textContent, 'my name is Tomster');
       });
     }
+  });
+});
+
+module('setupRenderingContext | render error handling', function (hooks) {
+  hooks.beforeEach(async function () {
+    setResolverRegistry({});
+
+    await setupContext(this);
+    await setupRenderingContext(this);
+  });
+
+  hooks.afterEach(async function () {
+    resetOnerror();
+    await teardownContext(this);
+  });
+
+  test('an error thrown while rendering is routed to the setupOnerror handler', async function (assert) {
+    assert.expect(1);
+
+    setupOnerror((error) => {
+      assert.ok(
+        /You must pass a function as the second argument to the `on` modifier/.test(
+          error.message
+        ),
+        'the render error reached the setupOnerror handler; got: ' +
+          error.message
+      );
+    });
+
+    await render(hbs`<div {{on "click" this.missingHandler}}></div>`);
   });
 });

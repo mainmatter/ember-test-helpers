@@ -146,19 +146,22 @@ function renderViaRenderComponent(
 
   const ownerToRenderFrom = options?.owner || owner;
 
+  // wrapping in `run` enables `setupOnerror` hook
   if (
     ownerToRenderFrom === owner &&
     typeof (owner as any).renderRootComponent === 'function'
   ) {
-    (owner as any).renderRootComponent(component);
+    run(() => (owner as any).renderRootComponent(component));
   } else {
     // @TODO: Evaluate if `renderRootComponent` should allow an alternative owner
     // as per `RenderOptions.owner` comment
-    renderComponent(component, {
-      into: getRootElement() as Element,
-      owner: ownerToRenderFrom,
-      appendIntoTarget: true,
-    });
+    run(() =>
+      renderComponent(component, {
+        into: getRootElement() as Element,
+        owner: ownerToRenderFrom,
+        appendIntoTarget: true,
+      }),
+    );
   }
 }
 
